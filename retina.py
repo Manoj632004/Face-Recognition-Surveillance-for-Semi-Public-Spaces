@@ -6,7 +6,6 @@ import re
 import shutil
 from collections import deque
 
-# Initialize OpenVINO for GPU execution
 os.environ["INTEL_OPENVINO_TARGET"] = "GPU"
 
 def preprocess_face(face_img):
@@ -32,13 +31,11 @@ def enhance_low_light_image(frame):
     if frame.dtype != np.uint8:
         frame = frame.astype(np.uint8)
     
-    # Apply gamma correction
     gamma = 2.0
     inv_gamma = 1.0 / gamma
     table = np.array([((i / 255.0) ** inv_gamma) * 255 for i in np.arange(0, 256)]).astype("uint8")
     frame_enhanced = cv2.LUT(frame, table)
     
-    # Apply CLAHE
     lab = cv2.cvtColor(frame_enhanced, cv2.COLOR_BGR2LAB)
     l, a, b = cv2.split(lab)
     clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8,8))
@@ -46,20 +43,17 @@ def enhance_low_light_image(frame):
     limg = cv2.merge((cl, a, b))
     final = cv2.cvtColor(limg, cv2.COLOR_LAB2BGR)
     
-    # Apply histogram equalization
     ycrcb = cv2.cvtColor(final, cv2.COLOR_BGR2YCrCb)
     channels = cv2.split(ycrcb)
     cv2.equalizeHist(channels[0], channels[0])
     cv2.merge(channels, ycrcb)
     final = cv2.cvtColor(ycrcb, cv2.COLOR_YCrCb2BGR)
     
-    # Apply bilateral filtering
     final = cv2.bilateralFilter(final, 9, 300, 300)
     
     return final
 
 def handle_long_distance(frame):
-    # Scale up the image to simulate closer distance
     scaled = cv2.resize(frame, None, fx=2, fy=2, interpolation=cv2.INTER_CUBIC)
     return scaled
 
@@ -121,15 +115,12 @@ def process_frame(ie, arcface_compiled, arcface_output_layer, face_det_compiled,
                   face_det_input_layer, face_det_output_layer, fd_input_h, fd_input_w,
                   known_embeddings, frame, unknown_buffer, unknown_images,
                   SIMILARITY_THRESHOLD, ENROLL_CAPTURE_COUNT, DUPLICATE_SIMILARITY_THRESHOLD,
-                  known_faces_dir):  # Added known_faces_dir as a parameter
+                  known_faces_dir): 
     
-    # Handle dark lighting and enhance image quality
     enhanced_frame = enhance_low_light_image(frame)
     
-    # Handle long distance by scaling up
     scaled_frame = handle_long_distance(enhanced_frame)
     
-    # Preprocess for face detection with multiple scales
     face_scales = [1.0, 0.8, 1.2, 1.4]
     faces = []
     
@@ -144,19 +135,17 @@ def process_frame(ie, arcface_compiled, arcface_output_layer, face_det_compiled,
         
         for detection in detections:
             confidence = float(detection[2])
-            if confidence > 0.3:  # Lower confidence threshold
+            if confidence > 0.3:  
                 x_min = int(detection[3] * width)
                 y_min = int(detection[4] * height)
                 x_max = int(detection[5] * width)
                 y_max = int(detection[6] * height)
                 
-                # Convert back to original scale
                 x_min = int(x_min / scale)
                 y_min = int(y_min / scale)
                 x_max = int(x_max / scale)
                 y_max = int(y_max / scale)
                 
-                # Ensure coordinates are within bounds
                 x_min = max(0, min(x_min, scaled_frame.shape[1] - 1))
                 y_min = max(0, min(y_min, scaled_frame.shape[0] - 1))
                 x_max = max(0, min(x_max, scaled_frame.shape[1] - 1))
@@ -164,7 +153,6 @@ def process_frame(ie, arcface_compiled, arcface_output_layer, face_det_compiled,
                 
                 faces.append((x_min, y_min, x_max, y_max))
     
-    # Remove duplicate faces
     unique_faces = []
     seen = set()
     for face in faces:
@@ -173,7 +161,6 @@ def process_frame(ie, arcface_compiled, arcface_output_layer, face_det_compiled,
             seen.add(key)
             unique_faces.append(face)
     
-    # Draw bounding boxes and process faces
     faces_detected = False
     for (x_min, y_min, x_max, y_max) in unique_faces:
         cv2.rectangle(scaled_frame, (x_min, y_min), (x_max, y_max), (0, 255, 0), 2)
@@ -196,7 +183,6 @@ def process_frame(ie, arcface_compiled, arcface_output_layer, face_det_compiled,
                 best_similarity = sim
                 best_match_name = name
         
-        # Label the face in the webcam feed
         if best_similarity >= SIMILARITY_THRESHOLD:
             label = f"{best_match_name} ({best_similarity*100:.1f}%)"
         else:
@@ -240,7 +226,6 @@ def process_frame(ie, arcface_compiled, arcface_output_layer, face_det_compiled,
                 unknown_buffer.clear()
                 unknown_images.clear()
         
-        # Draw the label on the frame with increased font size
         cv2.putText(scaled_frame, label, (x_min, y_min - 10), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 3)
 
     return scaled_frame, faces_detected
@@ -273,7 +258,6 @@ def main():
     known_embeddings = load_known_faces_embeddings(ie, arcface_compiled, arcface_output_layer, known_faces_dir)
     print(f"Total known faces loaded: {len(known_embeddings)}")
     
-    # Parameters for unknown face handling
     SIMILARITY_THRESHOLD = 0.7
     ENROLL_CAPTURE_COUNT = 50
     DUPLICATE_SIMILARITY_THRESHOLD = 0.85
@@ -281,7 +265,6 @@ def main():
     unknown_buffer = deque(maxlen=ENROLL_CAPTURE_COUNT)
     unknown_images = []
     
-    # Start capturing video from webcam
     cap = cv2.VideoCapture(0)
     
     if not cap.isOpened():
@@ -294,20 +277,16 @@ def main():
             print("Error: Could not read frame.")
             break
         
-        # Process the current frame
         processed_frame, faces_detected = process_frame(ie, arcface_compiled, arcface_output_layer, face_det_compiled,
                                                         face_det_input_layer, face_det_output_layer, fd_input_h, fd_input_w,
                                                         known_embeddings, frame, unknown_buffer, unknown_images,
                                                         SIMILARITY_THRESHOLD, ENROLL_CAPTURE_COUNT, DUPLICATE_SIMILARITY_THRESHOLD,
-                                                        known_faces_dir)  # Pass known_faces_dir here
+                                                        known_faces_dir)  
         
-        # Resize the processed frame for display
-        display_frame = cv2.resize(processed_frame, (640, 480))  # Adjust the size as needed
+        display_frame = cv2.resize(processed_frame, (640, 480))
         
-        # Display the processed frame
         cv2.imshow("Webcam Feed", display_frame)
         
-        # Exit on 'q' key press
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break
     
